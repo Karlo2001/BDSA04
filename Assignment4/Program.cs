@@ -1,4 +1,5 @@
 ﻿using System;
+using Microsoft.Extensions.Configuration;
 
 namespace Assignment4
 {
@@ -6,7 +7,9 @@ namespace Assignment4
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            var Configuration = new ConfigurationBuilder().AddUserSecrets<Program>().Build();
+
+            var connectionString = Configuration.GetConnectionString("ConnectionString");
         }
     }
 }
