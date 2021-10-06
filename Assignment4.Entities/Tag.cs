@@ -8,10 +8,12 @@ namespace Assignment4.Entities
 {
     public class Tag
     {
-        [Required()]
-        [Index(IsUnique=true)]
         public int Id {get; set;}
+
+        [Required]
+        [StringLength(50)]
         public string Name {get; set;}
-        public List<Task> Tasks {get; set;}
+
+        public Task[] Tasks {get; set;}
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System;
+using Assignment4.Core;
 
 namespace Assignment4.Entities
 {
@@ -13,22 +14,14 @@ namespace Assignment4.Entities
         [Required]
         [StringLength(100)]
         public string Title {get; set;}
-        public User AssignedTo {get; set;}
+        
+        public User? AssignedTo {get; set;}
 
-        [Optional]
-        public string Description {get; set;}
+        public string? Description {get; set;}
 
         [Required]
         public State State {get; set;}
-        public List<Tag> Tags {get; set;}
-    }
 
-    public enum State
-    {
-        New,
-        Active,
-        Resolved,
-        Closed,
-        Removed,
+        public List<Tag> Tags {get; set;}
     }
 }

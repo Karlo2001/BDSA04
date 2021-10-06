@@ -12,14 +12,12 @@ namespace Assignment4.Entities
         
         [Required]
         [StringLength(100)]
-
         public string Name {get; set;}
 
         [Required]
-        [Unique]
         [StringLength(100)]
-
         public string Email {get; set;}
+
         public List<Task> Tasks {get; set;}
     }
 }

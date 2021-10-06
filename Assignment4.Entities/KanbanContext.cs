@@ -16,8 +16,18 @@ namespace Assignment4.Entities
         {
             modelBuilder
                 .Entity<Task>()
-                .Property(e => e.State)
+                .Property(s => s.State)
                 .HasConversion<string>();
+
+            modelBuilder
+                .Entity<User>()
+                .HasIndex(u => u.Email)
+                .IsUnique(true);
+
+            modelBuilder
+                .Entity<Tag>()
+                .HasIndex(t => t.Name)
+                .IsUnique(true);
         }
     }
 }
