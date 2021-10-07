@@ -14,6 +14,6 @@ namespace Assignment4.Entities
         [StringLength(50)]
         public string Name {get; set;}
 
-        public Task[] Tasks {get; set;}
+        public List<Task> Tasks {get; set;}
     }
 }

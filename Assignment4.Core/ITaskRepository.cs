@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 
 namespace Assignment4.Core
@@ -13,6 +12,6 @@ namespace Assignment4.Core
         IReadOnlyCollection<TaskDTO> ReadAllByState(State state);
         TaskDetailsDTO Read(int taskId);
         Response Update(TaskUpdateDTO task);
-        Response Delete(int taskId);        void Update(TaskDTO task);
+        Response Delete(int taskId);
     }
 }

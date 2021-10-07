@@ -1,12 +1,13 @@
-﻿using System;
-using System.IO;
-using System.Linq;
-using System.Data.SqlClient;
-using System.Data;
+﻿using Assignment4.Core;
+using Assignment4.Entities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
-using Assignment4.Entities;
+using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
+using System.IO;
+using System.Linq;
 
 namespace Assignment4
 {
@@ -14,23 +15,33 @@ namespace Assignment4
     {
         static void Main(string[] args)
         {
-
-            var connectionString = "Server=localhost;Database=Kanban;User Id=sa;Password=MyStrongPassword;";
+            var configuration = LoadConfiguration();
+            var connectionString = configuration.GetConnectionString("ConnectionString");
 
             var optionsBuilder = new DbContextOptionsBuilder<KanbanContext>().UseSqlServer(connectionString);
 
             using var context = new KanbanContext(optionsBuilder.Options);
 
-
-            /* Apparently tries to insert into "TaskId" column for some reason. Most likely because Tasks is of type List<Task>
-            var tag = new Tag {
+            /*var tag = new List<Tag>();
+            var task = new Task { Title = "Cool title", State = State.Active, Tags = tag, Description = "", AssignedTo = null};
+            //Apparently tries to insert into "TaskId" column for some reason. Most likely because Tasks is of type List<Task>
+            var taga = new Tag {
                 Name = "Email@Email.com",
-                Tasks = "This task, and this task"
+                Tasks = new List<Task>()
             };
-            context.Tags.Add(tag);
+            taga.Tasks.Add(task);
+
+            //Console.WriteLine(task);
+            context.Tags.Add(taga);
             context.SaveChanges();
-            Console.WriteLine(tag);
-            
+            Console.WriteLine(taga);*/
+
+            var taskRepo = new TaskRepository(new SqlConnection(connectionString));
+            taskRepo.Delete(2);
+            foreach (var item in taskRepo.ReadAll())
+            {
+                Console.WriteLine(item);
+            }
 
             //Only works if tags in Task is of type string else if of type List<Tag> Invalid object name 'TagTask'
             /*var chars = from c in context.Tasks
@@ -41,6 +52,15 @@ namespace Assignment4
             {
                 Console.WriteLine(c);
             }*/
+        }
+        static IConfiguration LoadConfiguration()
+        {
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json")
+                .AddUserSecrets<Program>();
+
+            return builder.Build();
         }
     }
 }

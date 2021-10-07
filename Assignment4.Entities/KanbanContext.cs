@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System;
+using Assignment4;
+using Assignment4.Core;
 
 namespace Assignment4.Entities
 {
@@ -28,6 +30,16 @@ namespace Assignment4.Entities
                 .Entity<Tag>()
                 .HasIndex(t => t.Name)
                 .IsUnique(true);
+
+            modelBuilder
+                .Entity<Tag>()
+                .HasMany(t => t.Tasks)
+                .WithMany(p => p.Tags);
+            
+            modelBuilder
+                .Entity<Task>()
+                .HasMany(p => p.Tags)
+                .WithMany(t => t.Tasks);
         }
     }
 }

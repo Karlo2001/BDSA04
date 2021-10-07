@@ -1,9 +1,10 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
 
     <IsPackable>false</IsPackable>
+    <UserSecretsId>de9e9cb3-6232-4b8d-a8bc-83273b3e1983</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Assignment4.Entities\Assignment4.Entities.csproj" />
+    <ProjectReference Include="..\Assignment4\Assignment4.csproj" />
   </ItemGroup>
 
 </Project>
