@@ -23,5 +23,8 @@ namespace Assignment4.Entities
         public State State {get; set;}
 
         public List<Tag> Tags {get; set;}
+
+        // public DateTime Created { get; set; }
+        // public DateTime StateUpdated { get; set; }
     }
 }

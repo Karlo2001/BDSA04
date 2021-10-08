@@ -15,12 +15,12 @@ namespace Assignment4
     {
         static void Main(string[] args)
         {
-            var configuration = LoadConfiguration();
+            /*var configuration = LoadConfiguration();
             var connectionString = configuration.GetConnectionString("ConnectionString");
 
             var optionsBuilder = new DbContextOptionsBuilder<KanbanContext>().UseSqlServer(connectionString);
 
-            using var context = new KanbanContext(optionsBuilder.Options);
+            using var context = new KanbanContext(optionsBuilder.Options);*/
 
             /*var tag = new List<Tag>();
             var task = new Task { Title = "Cool title", State = State.Active, Tags = tag, Description = "", AssignedTo = null};
@@ -36,12 +36,6 @@ namespace Assignment4
             context.SaveChanges();
             Console.WriteLine(taga);*/
 
-            var taskRepo = new TaskRepository(new SqlConnection(connectionString));
-            taskRepo.Delete(2);
-            foreach (var item in taskRepo.ReadAll())
-            {
-                Console.WriteLine(item);
-            }
 
             //Only works if tags in Task is of type string else if of type List<Tag> Invalid object name 'TagTask'
             /*var chars = from c in context.Tasks

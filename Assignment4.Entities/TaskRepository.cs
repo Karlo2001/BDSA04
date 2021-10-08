@@ -1,219 +1,212 @@
 using Assignment4.Core;
-using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
+using static Assignment4.Core.Response;
+using static Assignment4.Core.State;
 
-// TODO: Set Created/StateUpdated to current time in UTC (Business rule 2.4)
-// TODO: Updating the State of a task will change the StateUpdated to current time in UTC (Business rule 2.6)
 namespace Assignment4.Entities
 {
     public class TaskRepository : ITaskRepository
     {
-        private readonly SqlConnection _connection;
+        private readonly KanbanContext _context;
 
-        public TaskRepository(SqlConnection connection)
+        public TaskRepository(KanbanContext context)
         {
-            _connection = connection;
+            _context = context;
         }
 
+        // Creating a task will set its state to New and Created/StateUpdated to current time in UTC.
+        // Create/update task must allow for editing tags.
+        // Assigning a user which does not exist should return BadRequest.
         public (Response Response, int TaskId) Create(TaskCreateDTO task) {
-            var cmdText = @"INSERT Tasks (Title, AssignedToId, Description, State, Tags)
-                            VALUES (@Title, @AssignedToId, @Description, @State, @Tags);
-                            SELECT SCOPE_IDENTITY()";
-            using var command = new SqlCommand(cmdText, _connection);
+            
+            User? user = (from c in _context.Users
+                          where c.Id == task.AssignedToId
+                          select c).FirstOrDefault();
 
-            command.Parameters.AddWithValue("@Title", task.Title);
-            command.Parameters.AddWithValue("@AssignedToId", task.AssignedToId);
-            command.Parameters.AddWithValue("@Description", task.Description);
-            command.Parameters.AddWithValue("@State", State.New);
-            command.Parameters.AddWithValue("@Tags", task.Tags);
+            if (user == null)
+            {
+                return (Response.BadRequest, -1);
+            }
 
-            OpenConnection();
+            var tags = from c in _context.Tags
+                       where !task.Tags.Contains(c.Name)
+                       select c;
 
-            var id = (int) command.ExecuteScalar();
+            var created = new Task {
+                Title = task.Title,
+                AssignedTo = user,
+                Description = task.Description,
+                State = New,
+            };
 
-            CloseConnection();
+            var checkCreate = (from c in _context.Tasks
+                              where c.Title == created.Title
+                              select c.Id).FirstOrDefault();
 
-            return (Response.Created, id);
+            if (checkCreate == null || checkCreate == 0)
+            {
+                _context.Tasks.Add(created);
+
+                _context.SaveChanges();
+
+                return (Created, created.Id);
+            } 
+            else 
+            {
+                return (Conflict, checkCreate);    
+            }
         }
 
         public IReadOnlyCollection<TaskDTO> ReadAll()
         {
-            var cmdText = @"SELECT * FROM Tasks";
-            using var command = new SqlCommand(cmdText, _connection);
+            var tasks = (from t in _context.Tasks
+                         select t).ToList();
 
-            OpenConnection();
-
-            using var reader = command.ExecuteReader();
-            List<TaskDTO> tasks = new List<TaskDTO>();
-
-            while (reader.Read())
-            {
-                tasks.Add(createTaskDTO(reader));
-            }
-
-            CloseConnection();
-
-            return tasks;
+            return ConvertToTaskDTOs(tasks);
         }
 
         public IReadOnlyCollection<TaskDTO> ReadAllRemoved() 
         {
-            var cmdText = @"SELECT * FROM Tasks WHERE State = @State";
-            using var command = new SqlCommand(cmdText, _connection);
-
-            command.Parameters.AddWithValue("@State", State.Removed);
-
-            OpenConnection();
-
-            using var reader = command.ExecuteReader();
-            List<TaskDTO> tasks = new List<TaskDTO>();
-
-            while (reader.Read())
-            {
-                tasks.Add(createTaskDTO(reader));
-            }
-
-            CloseConnection();
-
-            return tasks;
+            return ReadAllByState(Removed);
         }
 
         public IReadOnlyCollection<TaskDTO> ReadAllByTag(string tag)
         {
-            throw new NotImplementedException();
+            var tasks = (from c in _context.Tasks
+                              select c).ToList();
+
+            var tasksByTag = new List<Task>();
+            foreach (var task in tasks)
+            {
+                if (task.Tags.Contains(new Tag { Name = tag }))
+                {
+                    tasksByTag.Add(task);
+                }
+            }
+
+            return ConvertToTaskDTOs(tasksByTag);
         }
         
         public IReadOnlyCollection<TaskDTO> ReadAllByUser(int userId)
         {
-            var cmdText = @"SELECT * FROM Tasks WHERE Id = @ID";
-            using var command = new SqlCommand(cmdText, _connection);
-
-            command.Parameters.AddWithValue("@ID", userId);
-
-            OpenConnection();
-
-            using var reader = command.ExecuteReader();
-            List<TaskDTO> tasks = new List<TaskDTO>();
-
-            while (reader.Read())
-            {
-                tasks.Add(createTaskDTO(reader));
-            }
-
-            CloseConnection();
-
-            return tasks;
+            throw new NotImplementedException();
         }
         
         public IReadOnlyCollection<TaskDTO> ReadAllByState(State state)
         {
-            var cmdText = @"SELECT * FROM Tasks WHERE State = @State";
-            using var command = new SqlCommand(cmdText, _connection);
-
-            command.Parameters.AddWithValue("@State", state);
-
-            OpenConnection();
-
-            using var reader = command.ExecuteReader();
-            List<TaskDTO> tasks = new List<TaskDTO>();
-
-            while (reader.Read())
-            {
-                tasks.Add(createTaskDTO(reader));
-            }
-
-            CloseConnection();
-
-            return tasks;
+            var tasksByState = (from c in _context.Tasks
+                                where c.State == state
+                                select c).ToList();
+            
+            return ConvertToTaskDTOs(tasksByState);
         }
-        
+
         public TaskDetailsDTO Read(int taskId)
         {
-            var cmdText = @"SELECT * FROM Tasks WHERE Id = @ID";
-            using var command = new SqlCommand(cmdText, _connection);
+            var task = from c in _context.Tasks
+                       where c.Id == taskId
+                       select new TaskDetailsDTO (
+                           c.Id,
+                           c.Title,
+                           c.Description,
+                           DateTime.Now,
+                           c.AssignedTo.Name,
+                           c.Tags.Select(t => t.Name).ToHashSet(),
+                           c.State,
+                           DateTime.Now
+                       );
 
-            command.Parameters.AddWithValue("@ID", taskId);
-
-            OpenConnection();
-
-            using var reader = command.ExecuteReader();
-            var task = reader.Read() ? new TaskDetailsDTO(
-                reader.GetInt32("Id"),
-                reader.GetString("Title"),
-                reader.GetString("Description"),
-                DateTime.Parse(reader.GetString("Created")),  // DateTime, where does this come from??
-                reader.GetString("Assigned_To"),
-                reader.GetString("Tags").Split(", "),
-                parseState(reader.GetString("State")),
-                DateTime.Parse(reader.GetString("StateUpdated")) // DateTime, where does this come from??
-            ) : null;
-
-            CloseConnection();
-
-            // return task;
-            // TaskDetailsDTO(int Id, string Title, string Description, DateTime Created, string AssignedToName, IReadOnlyCollection<string> Tags, State State, DateTime StateUpdated)
-            throw new NotImplementedException();
+            return task.FirstOrDefault();
         }
 
+        // Updating the State of a task will change the StateUpdated to current time in UTC.
+        // Assigning a user which does not exist should return BadRequest.
         public Response Update(TaskUpdateDTO task)
         {
-            throw new NotImplementedException();
+            var user = (from c in _context.Users
+                        where c.Id == task.AssignedToId
+                        select c).FirstOrDefault();
+
+            if (user.Id == 0)
+            {
+                return Response.BadRequest;
+            }
+            else
+            {
+                var updateTask = (from c in _context.Tasks
+                            where c.Id == task.Id
+                            select c).FirstOrDefault();
+
+                updateTask.Title = task.Title;
+                updateTask.AssignedTo = user;
+                updateTask.State = task.State;
+                updateTask.Description = task.Description;
+                var tags = (from c in _context.Tags
+                            where )
+                updateTask.Tags = task.Tags.Select(t => t.Name).ToList().AsReadOnly();
+                _context.SaveChanges();
+                return Response.Updated;
+            }
         }
 
+        // Only tasks with the state New can be deleted from the database.
+        // Deleting a task which is Active should set its state to Removed.
+        // Deleting a task which is Resolved, Closed, or Removed should return Conflict.
         public Response Delete(int taskId)
         {
-            var cmdText = @"DELETE Tasks WHERE Id = @Id AND State = 'New'";
 
-            using var command = new SqlCommand(cmdText, _connection);
+            var task = (from c in _context.Tasks
+                        where c.Id == taskId
+                        select c).FirstOrDefault();
 
-            command.Parameters.AddWithValue("@Id", taskId);
+            var userId = (from c in _context.Users
+                        where c.Id == task.AssignedTo.Id
+                        select c.Id).FirstOrDefault();
 
-            OpenConnection();
-
-            command.ExecuteNonQuery();
-
-            CloseConnection();
-
-            // return Response.Deleted;
-            throw new NotImplementedException();
+            if (task.State == State.New)
+            {
+                _context.Tasks.Remove(task);
+                _context.SaveChanges();
+                return Response.Deleted;
+            }
+            else if (task.State == State.Active)
+            {
+                var updateTask = new TaskUpdateDTO{
+                    Id = task.Id,
+                    Title = task.Title,
+                    AssignedToId = userId,
+                    State = State.Removed,
+                    Description = task.Description,
+                    Tags = task.Tags.Select(t => t.Name).ToList().AsReadOnly()
+                };
+                return Update(updateTask);
+            }
+            else
+            {
+                return Response.Conflict;
+            }
         }
         
-        private void OpenConnection()
+        private IReadOnlyCollection<TaskDTO> ConvertToTaskDTOs(List<Task> tasks)
         {
-            if (_connection.State == ConnectionState.Closed)
+            var listDTO = new List<TaskDTO>();
+            
+            foreach (var task in tasks)
             {
-                _connection.Open();
+                var userName = (from t in _context.Users
+                                where t.Id == task.AssignedTo.Id
+                                select t.Name).FirstOrDefault();
+                listDTO.Add(new TaskDTO(task.Id, task.Title, userName, task.Tags.Select(t => t.Name).ToHashSet(), task.State));
             }
-        }
 
-        private void CloseConnection()
-        {
-            if (_connection.State == ConnectionState.Open)
-            {
-                _connection.Close();
-            }
-        }
-
-        private TaskDTO createTaskDTO(SqlDataReader reader)
-        {
-            return new TaskDTO (
-                reader.GetInt32("Id"),
-                reader.GetString("Title"),
-                reader.GetString("Assigned_To"),
-                reader.GetString("Tags").Split(", "),
-                parseState(reader.GetString("State"))
-            );
-        }
-
-        private State parseState(string state)
-        {
-            return (State) Enum.Parse(typeof(State), state, true);
+            return listDTO.AsReadOnly();
         }
     }
 }
