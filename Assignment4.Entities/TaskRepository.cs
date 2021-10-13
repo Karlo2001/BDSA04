@@ -21,37 +21,52 @@ namespace Assignment4.Entities
             _context = context;
         }
 
-        // Creating a task will set its state to New and Created/StateUpdated to current time in UTC.
-        // Create/update task must allow for editing tags.
-        // Assigning a user which does not exist should return BadRequest.
         public (Response Response, int TaskId) Create(TaskCreateDTO task) {
-            
-            User? user = (from c in _context.Users
-                          where c.Id == task.AssignedToId
-                          select c).FirstOrDefault();
+            User user = (from u in _context.Users
+                         where u.Id == task.AssignedToId
+                         select u).FirstOrDefault();
 
             if (user == null)
             {
                 return (Response.BadRequest, -1);
             }
 
-            var tags = from c in _context.Tags
-                       where !task.Tags.Contains(c.Name)
-                       select c;
+            var tags = from t in _context.Tags
+                       where !task.Tags.Contains(t.Name)
+                       select t;
 
             var created = new Task {
                 Title = task.Title,
                 AssignedTo = user,
                 Description = task.Description,
                 State = New,
+                Created = DateTime.UtcNow,
+                StateUpdated = DateTime.UtcNow
             };
 
             var checkCreate = (from c in _context.Tasks
-                              where c.Title == created.Title
-                              select c.Id).FirstOrDefault();
+                               where c.Title == created.Title
+                               select c.Id).FirstOrDefault();
 
             if (checkCreate == null || checkCreate == 0)
             {
+                 foreach (var item in task.Tags)
+                {
+                    var findTag = (from c in _context.Tags
+                                   where c.Name == item
+                                   select c).FirstOrDefault();
+                    if (findTag == null)
+                    {
+                        var tag = new Tag {Name = item, Tasks = new List<Task>() { created }};
+                        _context.Tags.Add(tag);
+                        created.Tags.Add(tag);
+                    }
+                    else 
+                    {
+                        created.Tags.Add(findTag);
+                    }
+                }
+
                 _context.Tasks.Add(created);
 
                 _context.SaveChanges();
@@ -96,7 +111,26 @@ namespace Assignment4.Entities
         
         public IReadOnlyCollection<TaskDTO> ReadAllByUser(int userId)
         {
-            throw new NotImplementedException();
+            var user = (from c in _context.Users
+                        where c.Id == userId
+                        select c).FirstOrDefault();
+            
+            if (user.Id == 0)
+            {
+                return new List<TaskDTO>().AsReadOnly();
+            }
+
+            var tasks = (from t in _context.Tasks select t).ToList();
+            var taskList = new List<Task>();
+            foreach (var task in tasks)
+            {
+                if (task.AssignedTo.Id == userId)
+                {
+                    taskList.Add(task);
+                }
+            }
+
+            return ConvertToTaskDTOs(taskList);
         }
         
         public IReadOnlyCollection<TaskDTO> ReadAllByState(State state)
@@ -116,18 +150,16 @@ namespace Assignment4.Entities
                            c.Id,
                            c.Title,
                            c.Description,
-                           DateTime.Now,
+                           c.Created,
                            c.AssignedTo.Name,
                            c.Tags.Select(t => t.Name).ToHashSet(),
                            c.State,
-                           DateTime.Now
+                           c.StateUpdated
                        );
 
             return task.FirstOrDefault();
         }
 
-        // Updating the State of a task will change the StateUpdated to current time in UTC.
-        // Assigning a user which does not exist should return BadRequest.
         public Response Update(TaskUpdateDTO task)
         {
             var user = (from c in _context.Users
@@ -141,24 +173,44 @@ namespace Assignment4.Entities
             else
             {
                 var updateTask = (from c in _context.Tasks
-                            where c.Id == task.Id
-                            select c).FirstOrDefault();
-
+                                  where c.Id == task.Id
+                                  select c).FirstOrDefault();
                 updateTask.Title = task.Title;
                 updateTask.AssignedTo = user;
                 updateTask.State = task.State;
                 updateTask.Description = task.Description;
-                var tags = (from c in _context.Tags
-                            where )
-                updateTask.Tags = task.Tags.Select(t => t.Name).ToList().AsReadOnly();
+                updateTask.StateUpdated = DateTime.UtcNow;
+
+                var tags = (from c in _context.Tags select c).ToList();
+                var updatedTags = new List<Tag>();
+
+                foreach (var item in tags)
+                {
+                    if (task.Tags.Contains(item.Name))
+                    {
+                        updatedTags.Add(item);
+                        task.Tags.Remove(item.Name);
+                    }
+                }
+
+                if (task.Tags.Count > 0)
+                {
+                    foreach (var item in task.Tags)
+                    {
+                        var tag = new Tag {Name = item, Tasks = new List<Task>() { updateTask }};
+                        updatedTags.Add(tag);
+                        _context.Tags.Add(tag);
+                        _context.SaveChanges();
+                    }
+                }
+
+                updateTask.Tags = updatedTags;
                 _context.SaveChanges();
+
                 return Response.Updated;
             }
         }
 
-        // Only tasks with the state New can be deleted from the database.
-        // Deleting a task which is Active should set its state to Removed.
-        // Deleting a task which is Resolved, Closed, or Removed should return Conflict.
         public Response Delete(int taskId)
         {
 
@@ -167,13 +219,14 @@ namespace Assignment4.Entities
                         select c).FirstOrDefault();
 
             var userId = (from c in _context.Users
-                        where c.Id == task.AssignedTo.Id
-                        select c.Id).FirstOrDefault();
+                          where c.Id == task.AssignedTo.Id
+                          select c.Id).FirstOrDefault();
 
             if (task.State == State.New)
             {
                 _context.Tasks.Remove(task);
                 _context.SaveChanges();
+
                 return Response.Deleted;
             }
             else if (task.State == State.Active)
@@ -184,8 +237,9 @@ namespace Assignment4.Entities
                     AssignedToId = userId,
                     State = State.Removed,
                     Description = task.Description,
-                    Tags = task.Tags.Select(t => t.Name).ToList().AsReadOnly()
+                    Tags = task.Tags.Select(t => t.Name).ToList()
                 };
+
                 return Update(updateTask);
             }
             else

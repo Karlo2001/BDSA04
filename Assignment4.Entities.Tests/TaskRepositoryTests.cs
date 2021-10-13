@@ -40,10 +40,10 @@ namespace Assignment4.Entities.Tests
             context.Tags.AddRange(urgent, needsInfo, notImportant);
             context.Users.AddRange(billy, alice, emily, charlie);
             context.Tasks.AddRange(
-                new Task { Id = 1, Title = "Cleaning", AssignedTo = billy, Description = "The office and the bathroom needs to be cleaned", State = New, Tags = new List<Tag>() { notImportant } },
-                new Task { Id = 2, Title = "Arrange event", AssignedTo = alice, Description = "Big company will be arriving. We need to arrange an event for them", State = Active, Tags = new List<Tag>() { urgent, needsInfo } },
-                new Task { Id = 3, Title = "Update FAQ", AssignedTo = emily, State = Removed, Tags = new List<Tag>() { notImportant } },
-                new Task { Id = 4, Title = "Go skiing in Val d'isère", AssignedTo = charlie, State = Removed, Tags = new List<Tag>() { notImportant } }
+                new Task { Id = 1, Title = "Cleaning", AssignedTo = billy, Description = "The office and the bathroom needs to be cleaned", State = New, Tags = new List<Tag>() { notImportant }, Created = DateTime.UtcNow, StateUpdated = DateTime.UtcNow },
+                new Task { Id = 2, Title = "Arrange event", AssignedTo = alice, Description = "Big company will be arriving. We need to arrange an event for them", State = Active, Tags = new List<Tag>() { urgent, needsInfo }, Created = DateTime.UtcNow, StateUpdated = DateTime.UtcNow },
+                new Task { Id = 3, Title = "Update FAQ", AssignedTo = emily, State = Removed, Tags = new List<Tag>() { notImportant }, Created = DateTime.UtcNow, StateUpdated = DateTime.UtcNow },
+                new Task { Id = 4, Title = "Go skiing in Val d'isère", AssignedTo = charlie, State = Removed, Tags = new List<Tag>() { notImportant }, Created = DateTime.UtcNow, StateUpdated = DateTime.UtcNow }
             );
 
             context.SaveChanges();
@@ -55,7 +55,7 @@ namespace Assignment4.Entities.Tests
         [Fact]
         public void TaskCreateNewTaskReturnsResponseCreated()
         {
-            var task = _repo.Create(new TaskCreateDTO{Title = "Task2", AssignedToId = 1, Description = "Desc"});
+            var task = _repo.Create(new TaskCreateDTO{Title = "Task2", AssignedToId = 1, Description = "Desc", Tags = new HashSet<string>()});
 
             Assert.Equal(Response.Created, task.Response);
         }
@@ -63,9 +63,9 @@ namespace Assignment4.Entities.Tests
         [Fact]
         public void TaskCreateExistingTaskReturnsConflictResponse()
         {
-            var task = _repo.Create(new TaskCreateDTO { Title = "Cleaning", AssignedToId = 1, Description = "Desc" });
+            var response = _repo.Create(new TaskCreateDTO { Title = "Cleaning", AssignedToId = 1, Description = "Desc" });
 
-            Assert.Equal((Response.Conflict, 1), task);
+            Assert.Equal((Response.Conflict, 1), response);
         }
 
         [Fact]
@@ -78,10 +78,29 @@ namespace Assignment4.Entities.Tests
             );
             
             var response = tuple.Item1;
-            var taskID = tuple.Item2;
+            var taskId = tuple.Item2;
 
             Assert.Equal(BadRequest, response);
-            Assert.Equal(-1, taskID);
+            Assert.Equal(-1, taskId);
+        }
+
+        [Fact]
+        public void TaskCreateSetsStateToNew()
+        {
+            var taskId = _repo.Create(new TaskCreateDTO { Title = "New Task", AssignedToId = 1, Description = "Task with State.New", Tags = new HashSet<string>() }).Item2;
+            var task = _repo.Read(taskId);
+
+            Assert.Equal(New, task.State);
+        }
+
+        [Fact]
+        public void TaskCreateSetsDateTimesToUtcNow()
+        {
+            var taskId = _repo.Create(new TaskCreateDTO { Title = "UtcNow Task", AssignedToId = 1, Description = "Task with DateTime.UtcNow", Tags = new HashSet<string>() }).Item2;
+            var task = _repo.Read(taskId);
+
+            Assert.Equal(DateTime.UtcNow, task.Created, precision: TimeSpan.FromSeconds(5));
+            Assert.Equal(DateTime.UtcNow, task.StateUpdated, precision: TimeSpan.FromSeconds(5));
         }
 
         [Fact]
@@ -91,7 +110,6 @@ namespace Assignment4.Entities.Tests
             var task2 = new TaskDTO ( 2, "Arrange event", "Alice", new HashSet<string>() { "Urgent", "Needs info" }, Active );
             var task3 = new TaskDTO ( 3, "Update FAQ", "Emily", new HashSet<string>() { "Not important" }, Removed );
             var task4 = new TaskDTO ( 4, "Go skiing in Val d'isère", "Charlie", new HashSet<string>() { "Not important" }, Removed );
-
             var taskList = new List<TaskDTO>() { task1, task2, task3, task4 };
 
             var tasks = _repo.ReadAll();
@@ -133,13 +151,82 @@ namespace Assignment4.Entities.Tests
             }
         }
 
+        [Theory]
+        [InlineData("Billy", 1)]
+        [InlineData("Alice", 2)]
+        [InlineData("Emily", 3)]
+        [InlineData("Charlie", 4)]
+        public void TaskReadAllByUserReturnsAllTasksWithUser(string userName, int userId)
+        {
+            var tasks = _repo.ReadAllByUser(userId);
+            
+            foreach (var task in tasks)
+            {
+                Assert.Equal(userName, task.AssignedToName);
+            }
+        }
+
+        [Fact]
+        public void TaskReadReturnsAllTaskDetails()
+        {
+            var task = _repo.Read(1);
+            var tags = new HashSet<string>() { "Not important" };
+
+            Assert.Equal(1, task.Id);
+            Assert.Equal("Cleaning", task.Title);
+            Assert.Equal("The office and the bathroom needs to be cleaned", task.Description);
+            Assert.Equal("Billy", task.AssignedToName);
+            Assert.Equal(New, task.State);
+            Assert.True(tags.SetEquals(task.Tags));
+        }
+
+        [Fact]
+        public void TaskReadReturnsNulIfTaskDoesNotExist()
+        {
+            var task = _repo.Read(404);
+
+            Assert.Null(task);
+        }
+
+        [Fact]
+        public void UpdateAnExistingTaskReturnsResponseUpdated()
+        {
+            var updateTask = new TaskUpdateDTO {Title = "Updated title", AssignedToId = 1, Description = "Updated description", Tags = new HashSet<string>() { "Updated" }, Id = 4, State = State.Active};
+            var response = _repo.Update(updateTask);
+            var task = _repo.Read(4);
+
+            Assert.Equal(Response.Updated, response);
+            Assert.Equal(updateTask.Title, task.Title);
+            Assert.Equal(updateTask.Description, task.Description);
+            Assert.Equal(updateTask.Tags, task.Tags);
+            Assert.Equal(updateTask.Id, task.Id);
+            Assert.Equal(updateTask.State, task.State);
+        }
+
+        [Fact]
+        public void TaskUpdateUpdatesState()
+        {
+            var response = _repo.Update(new TaskUpdateDTO { Id = 1, Title = "Update Task State", AssignedToId = 1, Description = "State changed to State.Closed", Tags = new HashSet<string>(), State = Closed });
+            var task = _repo.Read(1);
+
+            Assert.Equal(Closed, task.State);
+        }
+
+        [Fact]
+        public void TaskUpdateSetsStateUpdatedToUtcNow()
+        {
+            var response = _repo.Update(new TaskUpdateDTO { Id = 1, Title = "Update Task State", AssignedToId = 1, Description = "State changed to State.Closed", Tags = new HashSet<string>(), State = Closed });
+            var task = _repo.Read(1);
+
+            Assert.Equal(DateTime.UtcNow, task.StateUpdated, precision: TimeSpan.FromSeconds(5));
+        }
 
         [Fact]
         public void DeleteNewTaskReturnsDeletedResponse()
         {
             var response = _repo.Delete(1);
 
-            Assert.Equal(Response.Deleted, response);
+            Assert.Equal(Deleted, response);
         }
 
 
@@ -148,7 +235,7 @@ namespace Assignment4.Entities.Tests
         {
             var response = _repo.Delete(3);
 
-            Assert.Equal(Response.Conflict, response);
+            Assert.Equal(Conflict, response);
         }
 
         [Fact]
@@ -156,7 +243,7 @@ namespace Assignment4.Entities.Tests
         {
             var response = _repo.Delete(2);
 
-            Assert.Equal(response, Response.Updated);
+            Assert.Equal(Updated, response);
         }
 
         public void Dispose()
@@ -164,7 +251,7 @@ namespace Assignment4.Entities.Tests
             _context.Dispose();
         }
         
-        private bool ContainsTag(Task task, string tag)
+        private bool ContainsTag(TaskDTO task, string tag)
         {
             foreach (var taskTag in task.Tags)
             {
